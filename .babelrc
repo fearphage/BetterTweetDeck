@@ -1,7 +1,15 @@
 {
   "plugins": [
-    "lodash"
+    "lodash",
+    [
+      "transform-react-jsx",
+      {
+        "pragma": "h",
+        "useBuiltIns": true
+      }
+    ]
   ],
+
   "presets": [
     [
       "env",

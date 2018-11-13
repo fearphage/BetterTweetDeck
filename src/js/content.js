@@ -11,7 +11,12 @@ import Emojis from './util/emojis';
 import Log from './util/logger';
 import * as BHelper from './util/browserHelper';
 import { $, TIMESTAMP_INTERVAL, onEvent, sendEvent } from './util/util';
+import { h } from 'dom-chef';
+import prism from 'prismjs';
+// import 'prismjs/components/prism-css';
+// import 'prismjs/components/prism-javascript';
 import '../css/index.css';
+import 'prismjs/themes/prism.css';
 
 let SETTINGS;
 
@@ -394,6 +399,127 @@ function addStickerToMessage(stickerObject, node) {
   );
 }
 
+//**
+const ignoreClass = 'btd-ignore';
+
+function textTransformer(fragment, text, index) {
+  console.log('text', text,
+  fragment.append(
+    index % 2
+    ? <code class="refined-twitter_markdown">{text}</code>
+    : text
+  );
+
+  return fragment;
+}
+
+const reSplit = /`([^`\n]+?)`/g;
+const reTest = /`[^`\n]+`/;
+const inlineCode = {
+  reSplit,
+  reTest,
+  transformer: textTransformer,
+};
+const blockCode = {
+  highlightCode: function(text) {
+    const map = {js: 'javascript'};
+    // console.log('highlightCode: text =>', typeof text, Object.prototype.toString.call(text), text);
+    const [, l = 'text', code] = text.match(/^(\w*)([\s\S]+)$/) || [];
+    const lookup = l.toLowerCase();
+    const lang = map[lookup] || lookup;
+
+    if (!code) {
+      return text;
+    }
+
+    if (lang in prism.languages) {
+      return (
+        <div class="refined-twitter_highlight">
+          <div class="refined-twitter_highlight-lang">
+            {lang}
+          </div>
+          <pre class={`language-${lang}`}>
+            <code class={`language-${lang}`}>
+              {parseHTML(prism.highlight(code, prism.languages[lang]))}
+            </code>
+          </pre>
+        </div>
+      );
+    }
+
+    // console.log('lang', lang, 'code', code.trim());
+
+    return (
+      <pre class="refined-twitter_highlight language-txt">
+        <code class="language-txt">
+          {code}
+        </code>
+      </pre>
+    );
+  },
+  reSplit: /```((?:\w*[\s\S]+?))```\n?/g,
+  reTest: /```\w*[\s\S]+?```/,
+  transformer: function(fragment, text, index) {
+    // console.log('transformer', index, text);
+    fragment.append(
+      index % 2
+      ? blockCode.highlightCode(text)
+      : text
+    );
+
+    return fragment;
+  },
+};
+function transformText(fragment, node) {
+  const contents = node.nodeValue;
+
+  if (reTest.test(contents)) {
+    contents.split(reSplit).reduce(textTransformer, fragment);
+  }
+  else {
+    // if we don't clone the node, it's pulled from the dom and we redraw/reflow
+    fragment.appendChild(node.cloneNode(true));
+  }
+
+  return fragment;
+}
+
+function codeBlockTransformText(fragment, node) {
+  const contents = node.nodeValue;
+
+  if (blockCode.reTest.test(contents)) {
+    contents.split(blockCode.reSplit).reduce(blockCode.transformer, fragment);
+  }
+  else {
+    // if we don't clone the node, it's pulled from the dom and we redraw/reflow
+    fragment.appendChild(node.cloneNode(true));
+  }
+
+  return fragment;
+}
+
+function parseHTML(html) {
+  const template = document.createElement('template');
+
+  if ('content' in template) {
+    template.innerHTML = html;
+
+    return document.importNode(template.content, true);
+  }
+
+  const fragment = new DocumentFragment();
+  const div = document.createElement('div');
+  div.innerHTML = html;
+
+  while (div.firstChild) {
+    fragment.appendChild(div);
+  }
+
+  return fragment;
+}
+
+// */
+
 /**
  * This is the main stuff, function called on every tweet
  */
@@ -566,6 +692,49 @@ function tweetHandler(tweet, columnKey, parent) {
         thumbnailsFromURLs([urlForThumbnail], node, mediaSize);
       }
     }
+  });
+
+  nodes = $(`.tweet-text:not(.${ignoreClass})`, parent);
+
+  if (!nodes) {
+    return;
+  }
+
+  nodes.forEach((el) => {
+    if (!blockCode.reTest.test(el.textContent)) {
+      return;
+    }
+
+    const fragment = Array
+      .from(el.childNodes)
+      .reduce(codeBlockTransformText, new DocumentFragment())
+    ;
+
+    // empty element
+    while (el.firstChild) {
+      el.removeChild(el.firstChild);
+    }
+
+    el.appendChild(fragment);
+  });
+
+  nodes.forEach((el) => {
+    if (!reTest.test(el.textContent)) {
+      return;
+    }
+
+    const fragment = Array
+      .from(el.childNodes)
+      .reduce(transformText, new DocumentFragment())
+    ;
+
+    // empty element
+    while (el.firstChild) {
+      el.removeChild(el.firstChild);
+    }
+
+    el.classList.add(ignoreClass);
+    el.appendChild(fragment);
   });
 }
 
