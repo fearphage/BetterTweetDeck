@@ -403,7 +403,7 @@ function addStickerToMessage(stickerObject, node) {
 const ignoreClass = 'btd-ignore';
 
 function textTransformer(fragment, text, index) {
-  console.log('text', text,
+  console.log('text', text, index);
   fragment.append(
     index % 2
     ? <code class="refined-twitter_markdown">{text}</code>
